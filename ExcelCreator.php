@@ -2,74 +2,186 @@
 
 class ExcelCreator
 {
-
+    /**
+     * @var \PHPExcel
+     */
     public $excel;
 
     /**
-     * @var PHPExcel_Worksheet
+     * @var \PHPExcel_Worksheet
      */
     public $sheet;
 
-    public $object;
-
+    /**
+     * The index that points to the columns
+     * @var int
+     */
     public $col = 0;
 
+    /**
+     * Excel columns [A-ZZ]
+     * @var array
+     */
     public $cols;
 
-    public $row = 1;
+    /**
+     * The index that points to the active
+     * @var int
+     */
+    public $row;
 
+    /**
+     * Variable used when is a horizontal display.
+     * @var int
+     */
+    public $hRow;
+
+    /**
+     * ExcelCreator constructor.
+     */
     public function __construct()
     {
         $this->excel = new \PHPExcel();
-        $this->object = array();
-        $this->cols =range('A', 'Z');
-    }
-
-    public function pushSingle($label, $value)
-    {
-        $this->sheet->setCellValue($this->getCoordinate(), $label);
-        $this->row++;
-        $this->sheet->setCellValue($this->getCoordinate(), $value);
-        $this->col++;
+        $_ranges = range('A', 'Z');
+        $ranges = $_ranges;
+        for ($i = 0; $i < sizeof($_ranges); $i++) {
+            foreach ($_ranges as $range) {
+                $ranges[] = $_ranges[$i] . $range;
+            }
+        }
+        $this->cols = $ranges;
+        $this->printLabels = true;
+        $this->hRow = 1;
         $this->row = 1;
     }
 
-    private function getCoordinate()
+    /**
+     * @param $label
+     * @param $values
+     * @return array
+     */
+    public static function getExportUnit($label, $values)
     {
-        return sprintf("%s%s",$this->getCol(), $this->row);
+        return array(
+            'label' => $label,
+            'values' => (is_array($values)) ? $values : array($values),
+        );
     }
 
-    private function getCol()
-    {
-        $col = $this->cols[$this->col];
-        return $col;
-    }
-
-    public function pushMultiple($label, array $values)
+    /**
+     * Push to a column multiple values
+     * @param $label
+     * @param array $values
+     */
+    public function pushV($label, array $values)
     {
         $this->sheet->setCellValue($this->getCoordinate(), $label);
         foreach ($values as $value) {
             $this->row++;
             $this->sheet->setCellValue($this->getCoordinate(), $value);
         }
+        $this->col++;
         $this->row = 1;
     }
 
+    /**
+     * Push variables on the horizontal way
+     * @param $label
+     * @param array $values
+     */
+    public function pushH($label, array $values)
+    {
+        if ($this->printLabels) {
+            $this->sheet->setCellValue($this->getCoordinate(), $label);
+        }
+        $this->row = $this->hRow;
+        $this->row++;
+        foreach ($values as $value) {
+            $this->sheet->setCellValue($this->getCoordinate(), $value);
+            $this->col++;
+        }
+        $this->row = $this->hRow;
+    }
+
+    /**
+     * Insert a value when it's going to be k=>v format
+     * @param $label
+     * @param $value
+     */
+    public function singleH($label, $value)
+    {
+        if ($this->printLabels) {
+            $this->sheet->setCellValue($this->getCoordinate(), $label);
+        }
+        $this->row = $this->hRow;
+        $this->row++;
+        $this->sheet->setCellValue($this->getCoordinate(), $value);
+        $this->col++;
+        $this->row = $this->hRow;
+    }
+
+    /**
+     *
+     */
+    public function dontPrintLabels()
+    {
+        $this->printLabels = false;
+    }
+
+    /**
+     * Get the column
+     * @return array
+     */
+    private function getCol()
+    {
+        $col = $this->cols[$this->col];
+        return $col;
+    }
+
+    /**
+     * Resets the Column value
+     */
+    public function reset()
+    {
+        $this->col = 0;
+        $this->hRow += 1;
+    }
+
+    /**
+     * Create a Sheet with a title
+     * @param $id
+     * @param null $title
+     */
     public function createSheet($id, $title = null)
     {
         $this->row = 1;
         $this->col = 0;
         $this->excel->createSheet($id);
+        $title = sprintf("%s...", substr($title, 0, 28));
         $this->sheet = $this->excel->setActiveSheetIndex($id);
         $this->sheet->setTitle($title);
-        $this->sheet->getStyle("A1")->getFont()->setBold();
     }
 
-    public function setSheet()
+    /**
+     * Create the Excel Object
+     * @param string $file
+     */
+    public function getBufferExcel($file = 'file_name')
     {
+        $this->redimension();
+        $this->excel->setActiveSheetIndex(0);
+        header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        header(sprintf('Content-Disposition: attachment;filename="%s.xls"', $file));
+        header('Cache-Control: max-age=0');
+
+        $objWriter = \PHPExcel_IOFactory::createWriter($this->excel, 'Excel5');
+        $objWriter->save('php://output');
     }
 
-    private function redimension()
+    /**
+     * Redimension all the columns of the Sheets
+     */
+    protected function redimension()
     {
         $objPHPExcel = $this->excel;
         foreach ($objPHPExcel->getWorksheetIterator() as $worksheet) {
@@ -86,19 +198,13 @@ class ExcelCreator
         $this->excel = $objPHPExcel;
     }
 
-    public function getExcel()
+    /**
+     * Get the active coordinate using the column and the row
+     * @return string
+     */
+    protected function getCoordinate()
     {
-        $this->redimension();
-        // We'll be outputting an excel file
-//        header("Content-Encoding: UTF-8");
-//        header('Content-type: application/vnd.ms-excel');
-
-        // It will be called file.xls
-//        header('Content-Disposition: attachment; filename="file.xls"');
-
-        // Write file to the browser
-        $file = 'file.xls';
-        $objWriter = PHPExcel_IOFactory::createWriter($this->excel, 'Excel2007');
-        $objWriter->save(__DIR__."/".$file);
+        return sprintf("%s%s", $this->getCol(), $this->row);
     }
+
 }
